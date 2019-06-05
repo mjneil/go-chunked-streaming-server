@@ -6,7 +6,6 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"os"
 )
 
 func main() {
@@ -23,14 +22,16 @@ func main() {
 			Scheme: "http",
 			Host:   "localhost:9094",
 			Path:   "/post-client.txt",
-		}
+		},
 	}
-	fmt.Printf("Doing request\n")
+
 	resp, err := client.Do(req)
+
 	if err != nil {
 		panic(err)
 	}
-	fmt.Println(resp.Body)
+	defer resp.Body.Close()
+
 	reader := bufio.NewReader(resp.Body)
 	for {
 		line, err := reader.ReadBytes('\n')

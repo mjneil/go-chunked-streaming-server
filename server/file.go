@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net/http"
 	"os"
 	"path"
 	"sync"
@@ -37,10 +38,11 @@ func NewFile(name, contentType string) *File {
 
 type FileReader struct {
 	offset int
+	w      http.ResponseWriter
 	*File
 }
 
-func (f *File) NewReader() io.Reader {
+func (f *File) NewReader(w http.ResponseWriter) io.Reader {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
 
@@ -57,6 +59,7 @@ func (f *File) NewReader() io.Reader {
 	fmt.Println("Reading from memory")
 	return &FileReader{
 		offset: 0,
+		w:      w,
 		File:   f,
 	}
 }
@@ -73,6 +76,7 @@ func (r *FileReader) Read(p []byte) (int, error) {
 	}
 	n := copy(p, r.File.buffer[r.offset:])
 	r.offset += n
+	// r.w.(http.Flusher).Flush()
 	return n, nil
 }
 

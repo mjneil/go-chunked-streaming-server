@@ -6,6 +6,16 @@ import (
 	"net/http"
 )
 
+type ChunkedResponseWriter struct {
+	w http.ResponseWriter
+}
+
+func (rw ChunkedResponseWriter) Write(p []byte) (nn int, err error) {
+	nn, err = rw.w.Write(p)
+	rw.w.(http.Flusher).Flush()
+	return
+}
+
 func GetHandler(w http.ResponseWriter, r *http.Request) {
 	FilesLock.RLock()
 	defer FilesLock.RUnlock()
@@ -20,7 +30,7 @@ func GetHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Transfer-Encoding", "chunked")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(http.StatusOK)
-	io.Copy(w, f.NewReader())
+	io.Copy(ChunkedResponseWriter{w}, f.NewReader(w))
 }
 
 func HeadHandler(w http.ResponseWriter, r *http.Request) {
