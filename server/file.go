@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"sync"
 )
 
@@ -97,6 +98,14 @@ func (f *File) WriteToDisk() error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	name := path.Join(contentDir, f.Name)
+
+	if _, err := os.Stat(filepath.Dir(name)); os.IsNotExist(err) {
+		err := os.Mkdir(filepath.Dir(name), 0755)
+		if err != nil {
+			return err
+		}
+	}
+
 	err := ioutil.WriteFile(name, f.buffer, 0644)
 	if err != nil {
 		return err

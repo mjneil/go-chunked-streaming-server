@@ -3,10 +3,14 @@ package server
 import (
 	"log"
 	"net/http"
+
+	"github.com/gorilla/mux"
 )
 
 func StartHttpServer() error {
-	return http.ListenAndServe(":9094", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	r := mux.NewRouter()
+
+	r.HandleFunc("/{id}/{file}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer w.(http.Flusher).Flush()
 		log.Printf("%s %s", r.Method, r.URL.String())
 		switch r.Method {
@@ -25,5 +29,7 @@ func StartHttpServer() error {
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
-	}))
+	})).Methods(http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions)
+
+	return http.ListenAndServe(":9094", r)
 }
