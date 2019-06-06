@@ -10,7 +10,7 @@ import (
 func StartHttpServer() error {
 	r := mux.NewRouter()
 
-	r.HandleFunc("/{id}/{file}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	r.PathPrefix("/").Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer w.(http.Flusher).Flush()
 		log.Printf("%s %s", r.Method, r.URL.String())
 		switch r.Method {

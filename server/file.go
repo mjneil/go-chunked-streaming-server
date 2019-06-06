@@ -100,7 +100,7 @@ func (f *File) WriteToDisk() error {
 	name := path.Join(contentDir, f.Name)
 
 	if _, err := os.Stat(filepath.Dir(name)); os.IsNotExist(err) {
-		err := os.Mkdir(filepath.Dir(name), 0755)
+		err := os.MkdirAll(filepath.Dir(name), 0755)
 		if err != nil {
 			return err
 		}
