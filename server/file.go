@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"path"
@@ -12,11 +13,14 @@ import (
 )
 
 var (
-	Files      = map[string]*File{}
-	FilesLock  = new(sync.RWMutex)
-	contentDir = "./content"
+	// Files Array of on the fly files
+	Files = map[string]*File{}
+
+	// FilesLock Lock used to write / read files
+	FilesLock = new(sync.RWMutex)
 )
 
+// File Definition of file
 type File struct {
 	Name        string
 	ContentType string
@@ -26,7 +30,10 @@ type File struct {
 	onDisk      bool
 }
 
+// NewFile Creates a new file
 func NewFile(name, contentType string) *File {
+	log.Println("NEW File Content-Type " + contentType)
+
 	return &File{
 		Name:        name,
 		ContentType: contentType,
@@ -37,18 +44,20 @@ func NewFile(name, contentType string) *File {
 	}
 }
 
+// FileReader Defines a reader
 type FileReader struct {
 	offset int
 	w      http.ResponseWriter
 	*File
 }
 
-func (f *File) NewReader(w http.ResponseWriter) io.Reader {
+// NewReader Crates a new filereader from a file
+func (f *File) NewReader(baseDir string, w http.ResponseWriter) io.Reader {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
 
 	if f.onDisk {
-		name := path.Join(contentDir, f.Name)
+		name := path.Join(baseDir, f.Name)
 		file, err := os.Open(name)
 		if err != nil {
 			panic(err)
@@ -65,15 +74,16 @@ func (f *File) NewReader(w http.ResponseWriter) io.Reader {
 	}
 }
 
+// Read Reads bytes from filereader
 func (r *FileReader) Read(p []byte) (int, error) {
 	r.File.lock.RLock()
 	defer r.File.lock.RUnlock()
 	if r.offset >= len(r.File.buffer) {
 		if r.File.eof {
 			return 0, io.EOF
-		} else {
-			return 0, nil
 		}
+
+		return 0, nil
 	}
 	n := copy(p, r.File.buffer[r.offset:])
 	r.offset += n
@@ -81,6 +91,7 @@ func (r *FileReader) Read(p []byte) (int, error) {
 	return n, nil
 }
 
+// Write Write bytes to a file
 func (f *File) Write(p []byte) (int, error) {
 	f.lock.Lock()
 	defer f.lock.Unlock()
@@ -88,16 +99,18 @@ func (f *File) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
+// Close Closes a file
 func (f *File) Close() {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 	f.eof = true
 }
 
-func (f *File) WriteToDisk() error {
+// WriteToDisk Writes a file to disc
+func (f *File) WriteToDisk(baseDir string) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
-	name := path.Join(contentDir, f.Name)
+	name := path.Join(baseDir, f.Name)
 
 	if _, err := os.Stat(filepath.Dir(name)); os.IsNotExist(err) {
 		err := os.MkdirAll(filepath.Dir(name), 0755)
@@ -115,11 +128,12 @@ func (f *File) WriteToDisk() error {
 	return nil
 }
 
-func (f *File) RemoveFromDisk() error {
+// RemoveFromDisk Removes file from disc
+func (f *File) RemoveFromDisk(baseDir string) error {
 	f.lock.Lock()
 	defer f.lock.Unlock()
 
-	name := path.Join(contentDir, f.Name)
+	name := path.Join(baseDir, f.Name)
 	err := os.Remove(name)
 
 	// even if we get an error, lets act as if the file is completely removed
