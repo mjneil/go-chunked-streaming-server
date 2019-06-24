@@ -6,17 +6,20 @@ import (
 	"net/http"
 )
 
+// ChunkedResponseWriter Define a response writer
 type ChunkedResponseWriter struct {
 	w http.ResponseWriter
 }
 
+// Write Writes few bytes
 func (rw ChunkedResponseWriter) Write(p []byte) (nn int, err error) {
 	nn, err = rw.w.Write(p)
 	rw.w.(http.Flusher).Flush()
 	return
 }
 
-func GetHandler(w http.ResponseWriter, r *http.Request) {
+// GetHandler Sends file bytes
+func GetHandler(basePath string, w http.ResponseWriter, r *http.Request) {
 	FilesLock.RLock()
 	defer FilesLock.RUnlock()
 
@@ -26,13 +29,16 @@ func GetHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Println("GET Content-Type " + f.ContentType)
+
 	w.Header().Set("Content-Type", f.ContentType)
 	w.Header().Set("Transfer-Encoding", "chunked")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(http.StatusOK)
-	io.Copy(ChunkedResponseWriter{w}, f.NewReader(w))
+	io.Copy(ChunkedResponseWriter{w}, f.NewReader(basePath, w))
 }
 
+// HeadHandler Sends if file exists
 func HeadHandler(w http.ResponseWriter, r *http.Request) {
 	FilesLock.RLock()
 	defer FilesLock.RUnlock()
@@ -49,7 +55,8 @@ func HeadHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func PostHandler(w http.ResponseWriter, r *http.Request) {
+// PostHandler Writes a file
+func PostHandler(basePath string, w http.ResponseWriter, r *http.Request) {
 	name := r.URL.String()
 	f := NewFile(name, r.Header.Get("Content-Type"))
 
@@ -62,7 +69,7 @@ func PostHandler(w http.ResponseWriter, r *http.Request) {
 	r.Body.Close()
 	f.Close()
 
-	err := f.WriteToDisk()
+	err := f.WriteToDisk(basePath)
 	if err != nil {
 		log.Fatalf("Error saving to disk: %v", err)
 	}
@@ -70,11 +77,13 @@ func PostHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func PutHandler(w http.ResponseWriter, r *http.Request) {
-	PostHandler(w, r)
+// PutHandler Writes a file
+func PutHandler(basePath string, w http.ResponseWriter, r *http.Request) {
+	PostHandler(basePath, w, r)
 }
 
-func DeleteHandler(w http.ResponseWriter, r *http.Request) {
+// DeleteHandler Deletes a file
+func DeleteHandler(basePath string, w http.ResponseWriter, r *http.Request) {
 	FilesLock.RLock()
 	f, ok := Files[r.URL.String()]
 	FilesLock.RUnlock()
@@ -86,12 +95,13 @@ func DeleteHandler(w http.ResponseWriter, r *http.Request) {
 
 	FilesLock.Lock()
 	defer FilesLock.Unlock()
-	f.RemoveFromDisk()
+	f.RemoveFromDisk(basePath)
 	delete(Files, r.URL.String())
 
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// OptionsHandler Returns CORS options
 func OptionsHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Add("Allow", http.MethodGet)
 	w.Header().Add("Allow", http.MethodHead)

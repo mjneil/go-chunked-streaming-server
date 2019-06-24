@@ -3,11 +3,13 @@ package server
 import (
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gorilla/mux"
 )
 
-func StartHttpServer() error {
+// StartHTTPServer Starts the webserver
+func StartHTTPServer(basePath string, port int) error {
 	r := mux.NewRouter()
 
 	r.PathPrefix("/").Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -15,15 +17,15 @@ func StartHttpServer() error {
 		log.Printf("%s %s", r.Method, r.URL.String())
 		switch r.Method {
 		case http.MethodGet:
-			GetHandler(w, r)
+			GetHandler(basePath, w, r)
 		case http.MethodHead:
 			HeadHandler(w, r)
 		case http.MethodPost:
-			PostHandler(w, r)
+			PostHandler(basePath, w, r)
 		case http.MethodPut:
-			PutHandler(w, r)
+			PutHandler(basePath, w, r)
 		case http.MethodDelete:
-			DeleteHandler(w, r)
+			DeleteHandler(basePath, w, r)
 		case http.MethodOptions:
 			OptionsHandler(w, r)
 		default:
@@ -31,5 +33,5 @@ func StartHttpServer() error {
 		}
 	})).Methods(http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions)
 
-	return http.ListenAndServe(":9094", r)
+	return http.ListenAndServe(":"+strconv.Itoa(port), r)
 }
