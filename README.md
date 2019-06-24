@@ -21,21 +21,16 @@ export GOPATH="$HOME/MYDIR/go"
 ```
 export PATH="$PATH:$GOPATH/bin
 ```
-5. TODO? Install Glide. See [glide](https://github.com/Masterminds/glide)
-6. TODO? Restart your terminal or source your profile
-7. Clone this repo:
+5. Restart your terminal or source your profile
+6. Clone this repo:
 ```
 go get github.com/mjneil/go-chunked-streaming-server
 ```
-8. Go the the source code dir `
+7. Go the the source code dir `
 ```
 cd $HOME/MYDIR/go/src/github.com/mjneil/go-chunked-streaming-server
 ```
-9. TODO? Install the package dependencies:
-```
-glide up
-```
-10. Compile `main.go` doing:
+8. Compile `main.go` doing:
 ```
 make
 ```
