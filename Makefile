@@ -11,10 +11,6 @@ LDFLAGS = -ldflags "-X main.gitSHA=$(shell git rev-parse HEAD)"
 .PHONY: all
 all: build test
 
-.PHONY: install-deps
-install-deps:
-	glide install
-
 .PHONY: build
 build:
 	if [ ! -d bin ]; then mkdir bin; fi
