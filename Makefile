@@ -1,3 +1,5 @@
+export GO111MODULE = on
+
 ifeq ($(shell uname),Darwin)
 	BINDIR = binaries/darwin
 else ifeq ($(shell uname),Linux)
