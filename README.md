@@ -1,4 +1,4 @@
-#go-chunked-streaming-server
+# go-chunked-streaming-server
 
 This is simple webserver written in [GoLang](https://golang.org/) that allows you to chunk transfer from the ingress and egress sides. In other words:
 - If it receives a GET request for object A, and object A is still being ingested, we send all we have of object A and we keep that GET request open sending on real time (and in memory) all the chunks that we received for object A, until that object is closed.

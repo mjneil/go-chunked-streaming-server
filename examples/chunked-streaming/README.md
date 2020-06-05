@@ -14,7 +14,7 @@ Open a second terminal session and start the GET client.
 ~/go-chunked-streaming-server $ go run examples/chunked-streaming/get_client/main.go
 ```
 
-Open a second terminal session and start the POST client.
+Open a third terminal session and start the POST client.
 ```
 # first build the input_stream and post_client binaries so we can pipe data
 ~/go-chunked-streaming-server $ make build-example-chunked-streaming
