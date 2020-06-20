@@ -9,7 +9,7 @@ import (
 )
 
 // StartHTTPServer Starts the webserver
-func StartHTTPServer(basePath string, port int) error {
+func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath string) error {
 	r := mux.NewRouter()
 
 	r.PathPrefix("/").Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -33,5 +33,16 @@ func StartHTTPServer(basePath string, port int) error {
 		}
 	})).Methods(http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions)
 
-	return http.ListenAndServe(":"+strconv.Itoa(port), r)
+	var err error
+	if (certFilePath != "") && (keyFilePath != "") {
+		// Try HTTPS
+		log.Printf("HTTPS server running on port %d", port)
+		err = http.ListenAndServeTLS(":"+strconv.Itoa(port), certFilePath, keyFilePath, r)
+	} else {
+		// Try HTTP
+		log.Printf("HTTP server running on port %d", port)
+		err = http.ListenAndServe(":"+strconv.Itoa(port), r)
+	}
+
+	return err
 }
