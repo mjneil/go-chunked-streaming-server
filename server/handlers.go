@@ -21,9 +21,9 @@ func (rw ChunkedResponseWriter) Write(p []byte) (nn int, err error) {
 // GetHandler Sends file bytes
 func GetHandler(basePath string, w http.ResponseWriter, r *http.Request) {
 	FilesLock.RLock()
-	defer FilesLock.RUnlock()
-
 	f, ok := Files[r.URL.String()]
+	FilesLock.RUnlock()
+
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -41,9 +41,9 @@ func GetHandler(basePath string, w http.ResponseWriter, r *http.Request) {
 // HeadHandler Sends if file exists
 func HeadHandler(w http.ResponseWriter, r *http.Request) {
 	FilesLock.RLock()
-	defer FilesLock.RUnlock()
-
 	f, ok := Files[r.URL.String()]
+	FilesLock.RUnlock()
+
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -86,6 +86,9 @@ func PutHandler(basePath string, w http.ResponseWriter, r *http.Request) {
 func DeleteHandler(basePath string, w http.ResponseWriter, r *http.Request) {
 	FilesLock.RLock()
 	f, ok := Files[r.URL.String()]
+	if ok {
+		delete(Files, r.URL.String())
+	}
 	FilesLock.RUnlock()
 
 	if !ok {
@@ -93,11 +96,7 @@ func DeleteHandler(basePath string, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	FilesLock.Lock()
-	defer FilesLock.Unlock()
 	f.RemoveFromDisk(basePath)
-	delete(Files, r.URL.String())
-
 	w.WriteHeader(http.StatusNoContent)
 }
 
