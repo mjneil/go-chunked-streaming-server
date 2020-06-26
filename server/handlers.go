@@ -86,15 +86,16 @@ func PutHandler(basePath string, w http.ResponseWriter, r *http.Request) {
 func DeleteHandler(basePath string, w http.ResponseWriter, r *http.Request) {
 	FilesLock.RLock()
 	f, ok := Files[r.URL.String()]
-	if ok {
-		delete(Files, r.URL.String())
-	}
 	FilesLock.RUnlock()
 
 	if !ok {
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
+
+	FilesLock.Lock()
+	delete(Files, r.URL.String())
+	FilesLock.Unlock()
 
 	f.RemoveFromDisk(basePath)
 	w.WriteHeader(http.StatusNoContent)
