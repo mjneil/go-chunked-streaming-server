@@ -32,7 +32,7 @@ type File struct {
 
 // NewFile Creates a new file
 func NewFile(name, contentType string) *File {
-	log.Println("NEW File Content-Type " + contentType)
+	log.Println("NEW File " + name)
 
 	return &File{
 		Name:        name,

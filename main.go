@@ -8,6 +8,7 @@ import (
 )
 
 var (
+	verbose      = flag.Bool("verbose", false, "enable to get verbose logging")
 	certFilePath = flag.String("c", "", "Certificate file path (only for https)")
 	keyFilePath  = flag.String("k", "", "Key file path (only for https)")
 	baseOutPath  = flag.String("p", "./content", "Path used to store")
@@ -23,5 +24,5 @@ func checkError(err error) {
 func main() {
 	flag.Parse()
 
-	checkError(server.StartHTTPServer(*baseOutPath, *port, *certFilePath, *keyFilePath))
+	checkError(server.StartHTTPServer(*baseOutPath, *port, *verbose, *certFilePath, *keyFilePath))
 }

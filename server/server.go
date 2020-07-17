@@ -4,17 +4,22 @@ import (
 	"log"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gorilla/mux"
 )
 
 // StartHTTPServer Starts the webserver
-func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath string) error {
+func StartHTTPServer(basePath string, port int, verboseLogging bool, certFilePath string, keyFilePath string) error {
 	r := mux.NewRouter()
 
 	r.PathPrefix("/").Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer w.(http.Flusher).Flush()
-		log.Printf("%s %s", r.Method, r.URL.String())
+		if verboseLogging {
+			log.Printf("%s %s {%s}", r.Method, r.URL.String(), getHeadersList(r))
+		} else {
+			log.Printf("%s %s", r.Method, r.URL.String())
+		}
 		switch r.Method {
 		case http.MethodGet:
 			GetHandler(basePath, w, r)
@@ -45,4 +50,24 @@ func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath
 	}
 
 	return err
+}
+
+func getHeadersList(r *http.Request) string {
+	ret := ""
+	for name, values := range r.Header {
+		if ret == "" {
+			ret = name + ":"
+		} else {
+			ret = ret + "; " + name + ":"
+		}
+
+		// Loop over all values for the name.
+		var valuesStr []string
+		for _, value := range values {
+			valuesStr = append(valuesStr, value)
+		}
+		ret = ret + strings.Join(valuesStr, ",")
+	}
+
+	return ret
 }
