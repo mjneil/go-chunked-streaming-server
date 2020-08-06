@@ -35,7 +35,9 @@ func GetHandler(basePath string, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Transfer-Encoding", "chunked")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.WriteHeader(http.StatusOK)
-	io.Copy(ChunkedResponseWriter{w}, f.NewReader(basePath, w))
+	rc := f.NewReadCloser(basePath,w)
+	defer rc.Close()
+	io.Copy(ChunkedResponseWriter{w}, rc)
 }
 
 // HeadHandler Sends if file exists
