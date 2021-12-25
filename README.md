@@ -39,10 +39,16 @@ make
 You can execute `./bin/./go-chunked-streaming-server -h` to see all the possible command arguments.
 ```
 Usage of ./bin/./go-chunked-streaming-server:
+  -c string
+        Certificate file path (only for https)
   -i int
         Port used for HTTP ingress/ egress (default 9094)
+  -k string
+        Key file path (only for https)
+  -o string
+        JSON file path with the CORS headers definition
   -p string
-        Path used to store  (default "./content")
+        Path used to store (default "./content")
 ```
 
 ## Example simple HTTP

@@ -9,7 +9,21 @@ import (
 )
 
 // StartHTTPServer Starts the webserver
-func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath string) error {
+func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath string, corsConfigFilePath string) error {
+	var err error
+
+	cors := NewCors()
+	if corsConfigFilePath != "" {
+		// Loads CORS config
+		err = cors.LoadFromDisc(corsConfigFilePath)
+		if err != nil {
+			return err
+		}
+	} else {
+		log.Printf("CORS default policy applied")
+	}
+	log.Printf("CORS: %s", cors.String())
+
 	r := mux.NewRouter()
 
 	r.PathPrefix("/").Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -17,23 +31,22 @@ func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath
 		log.Printf("%s %s", r.Method, r.URL.String())
 		switch r.Method {
 		case http.MethodGet:
-			GetHandler(basePath, w, r)
+			GetHandler(cors, basePath, w, r)
 		case http.MethodHead:
-			HeadHandler(w, r)
+			HeadHandler(cors, w, r)
 		case http.MethodPost:
-			PostHandler(basePath, w, r)
+			PostHandler(cors, basePath, w, r)
 		case http.MethodPut:
-			PutHandler(basePath, w, r)
+			PutHandler(cors, basePath, w, r)
 		case http.MethodDelete:
-			DeleteHandler(basePath, w, r)
+			DeleteHandler(cors, basePath, w, r)
 		case http.MethodOptions:
-			OptionsHandler(w, r)
+			OptionsHandler(cors, w, r)
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
 	})).Methods(http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions)
 
-	var err error
 	if (certFilePath != "") && (keyFilePath != "") {
 		// Try HTTPS
 		log.Printf("HTTPS server running on port %d", port)

@@ -19,7 +19,7 @@ func (rw ChunkedResponseWriter) Write(p []byte) (nn int, err error) {
 }
 
 // GetHandler Sends file bytes
-func GetHandler(basePath string, w http.ResponseWriter, r *http.Request) {
+func GetHandler(cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
 	FilesLock.RLock()
 	f, ok := Files[r.URL.String()]
 	FilesLock.RUnlock()
@@ -33,13 +33,14 @@ func GetHandler(basePath string, w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", f.ContentType)
 	w.Header().Set("Transfer-Encoding", "chunked")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	addCors(w, cors)
 	w.WriteHeader(http.StatusOK)
 	io.Copy(ChunkedResponseWriter{w}, f.NewReader(basePath, w))
 }
 
 // HeadHandler Sends if file exists
-func HeadHandler(w http.ResponseWriter, r *http.Request) {
+func HeadHandler(cors *Cors, w http.ResponseWriter, r *http.Request) {
 	FilesLock.RLock()
 	f, ok := Files[r.URL.String()]
 	FilesLock.RUnlock()
@@ -51,12 +52,13 @@ func HeadHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", f.ContentType)
 	w.Header().Set("Transfer-Encoding", "chunked")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	addCors(w, cors)
 	w.WriteHeader(http.StatusOK)
 }
 
 // PostHandler Writes a file
-func PostHandler(basePath string, w http.ResponseWriter, r *http.Request) {
+func PostHandler(cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
 	name := r.URL.String()
 	f := NewFile(name, r.Header.Get("Content-Type"))
 
@@ -74,16 +76,17 @@ func PostHandler(basePath string, w http.ResponseWriter, r *http.Request) {
 		log.Fatalf("Error saving to disk: %v", err)
 	}
 
+	addCors(w, cors)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // PutHandler Writes a file
-func PutHandler(basePath string, w http.ResponseWriter, r *http.Request) {
-	PostHandler(basePath, w, r)
+func PutHandler(cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
+	PostHandler(cors, basePath, w, r)
 }
 
 // DeleteHandler Deletes a file
-func DeleteHandler(basePath string, w http.ResponseWriter, r *http.Request) {
+func DeleteHandler(cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
 	FilesLock.RLock()
 	f, ok := Files[r.URL.String()]
 	FilesLock.RUnlock()
@@ -98,18 +101,21 @@ func DeleteHandler(basePath string, w http.ResponseWriter, r *http.Request) {
 	FilesLock.Unlock()
 
 	f.RemoveFromDisk(basePath)
+
+	addCors(w, cors)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // OptionsHandler Returns CORS options
-func OptionsHandler(w http.ResponseWriter, r *http.Request) {
-	w.Header().Add("Allow", http.MethodGet)
-	w.Header().Add("Allow", http.MethodHead)
-	w.Header().Add("Allow", http.MethodPost)
-	w.Header().Add("Allow", http.MethodPut)
-	w.Header().Add("Allow", http.MethodDelete)
-	w.Header().Add("Allow", http.MethodOptions)
+func OptionsHandler(cors *Cors, w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Transfer-Encoding", "chunked")
-	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	addCors(w, cors)
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func addCors(w http.ResponseWriter, cors *Cors) {
+	w.Header().Set("Access-Control-Allow-Origin", cors.GetAllowedOriginsStr())
+	w.Header().Set("Access-Control-Allow-Headers", cors.GetAllowedHeadersStr())
+	w.Header().Set("Access-Control-Allow-Methods", cors.GetAllowedMethodsStr())
 }
