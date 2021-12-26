@@ -9,7 +9,7 @@ import (
 )
 
 // StartHTTPServer Starts the webserver
-func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath string, corsConfigFilePath string) error {
+func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath string, corsConfigFilePath string, onlyRAM bool) error {
 	var err error
 
 	cors := NewCors()
@@ -35,11 +35,11 @@ func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath
 		case http.MethodHead:
 			HeadHandler(cors, w, r)
 		case http.MethodPost:
-			PostHandler(cors, basePath, w, r)
+			PostHandler(onlyRAM, cors, basePath, w, r)
 		case http.MethodPut:
-			PutHandler(cors, basePath, w, r)
+			PutHandler(onlyRAM, cors, basePath, w, r)
 		case http.MethodDelete:
-			DeleteHandler(cors, basePath, w, r)
+			DeleteHandler(onlyRAM, cors, basePath, w, r)
 		case http.MethodOptions:
 			OptionsHandler(cors, w, r)
 		default:

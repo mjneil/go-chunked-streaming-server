@@ -58,7 +58,7 @@ func HeadHandler(cors *Cors, w http.ResponseWriter, r *http.Request) {
 }
 
 // PostHandler Writes a file
-func PostHandler(cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
+func PostHandler(onlyRAM bool, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
 	name := r.URL.String()
 	f := NewFile(name, r.Header.Get("Content-Type"))
 
@@ -71,22 +71,23 @@ func PostHandler(cors *Cors, basePath string, w http.ResponseWriter, r *http.Req
 	r.Body.Close()
 	f.Close()
 
-	err := f.WriteToDisk(basePath)
-	if err != nil {
-		log.Fatalf("Error saving to disk: %v", err)
+	if !onlyRAM {
+		err := f.WriteToDisk(basePath)
+		if err != nil {
+			log.Fatalf("Error saving to disk: %v", err)
+		}
 	}
-
 	addCors(w, cors)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // PutHandler Writes a file
-func PutHandler(cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
-	PostHandler(cors, basePath, w, r)
+func PutHandler(onlyRAM bool, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
+	PostHandler(onlyRAM, cors, basePath, w, r)
 }
 
 // DeleteHandler Deletes a file
-func DeleteHandler(cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
+func DeleteHandler(onlyRAM bool, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
 	FilesLock.RLock()
 	f, ok := Files[r.URL.String()]
 	FilesLock.RUnlock()
@@ -100,7 +101,9 @@ func DeleteHandler(cors *Cors, basePath string, w http.ResponseWriter, r *http.R
 	delete(Files, r.URL.String())
 	FilesLock.Unlock()
 
-	f.RemoveFromDisk(basePath)
+	if !onlyRAM {
+		f.RemoveFromDisk(basePath)
+	}
 
 	addCors(w, cors)
 	w.WriteHeader(http.StatusNoContent)
