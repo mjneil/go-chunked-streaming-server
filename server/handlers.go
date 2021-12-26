@@ -4,6 +4,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"strings"
 )
 
 // ChunkedResponseWriter Define a response writer
@@ -118,7 +119,13 @@ func OptionsHandler(cors *Cors, w http.ResponseWriter, r *http.Request) {
 }
 
 func addCors(w http.ResponseWriter, cors *Cors) {
-	w.Header().Set("Access-Control-Allow-Origin", cors.GetAllowedOriginsStr())
-	w.Header().Set("Access-Control-Allow-Headers", cors.GetAllowedHeadersStr())
-	w.Header().Set("Access-Control-Allow-Methods", cors.GetAllowedMethodsStr())
+	// Add Content-Type & Cache-Control automatically
+	// Some features depends on those
+	allowedHeaders := cors.GetAllowedHeaders()
+	allowedHeaders = append(allowedHeaders, "Content-Type")
+	allowedHeaders = append(allowedHeaders, "Cache-Control")
+
+	w.Header().Set("Access-Control-Allow-Origin", strings.Join(cors.GetAllowedOrigins(), ", "))
+	w.Header().Set("Access-Control-Allow-Headers", strings.Join(allowedHeaders, ", "))
+	w.Header().Set("Access-Control-Allow-Methods", strings.Join(cors.GetAllowedMethods(), ", "))
 }

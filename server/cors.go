@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"os"
-	"strings"
 )
 
 //  corsData Raw data of CORS config
@@ -57,16 +56,16 @@ func (c *Cors) String() string {
 	return ret
 }
 
-func (c *Cors) GetAllowedOriginsStr() string {
-	return strings.Join(c.Data.AllowedOrigins[:], ", ")
+func (c *Cors) GetAllowedOrigins() []string {
+	return c.Data.AllowedOrigins
 }
 
-func (c *Cors) GetAllowedMethodsStr() string {
-	return strings.Join(c.Data.AllowedMethods[:], ", ")
+func (c *Cors) GetAllowedMethods() []string {
+	return c.Data.AllowedMethods
 }
 
-func (c *Cors) GetAllowedHeadersStr() string {
-	return strings.Join(c.Data.AllowedHeaders[:], ", ")
+func (c *Cors) GetAllowedHeaders() []string {
+	return c.Data.AllowedHeaders
 }
 
 func (c *Cors) loadJSONDataFromDisc(configFilePath string) (data []byte, err error) {
@@ -87,6 +86,6 @@ func (c *Cors) loadJSONDataFromDisc(configFilePath string) (data []byte, err err
 
 func (c *Cors) loadDefault() {
 	c.Data.AllowedMethods = []string{"GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"}
-	c.Data.AllowedHeaders = []string{"Content-Type"}
+	c.Data.AllowedHeaders = []string{""}
 	c.Data.AllowedOrigins = []string{"*"}
 }
