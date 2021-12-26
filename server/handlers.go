@@ -4,6 +4,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -61,7 +63,11 @@ func HeadHandler(cors *Cors, w http.ResponseWriter, r *http.Request) {
 // PostHandler Writes a file
 func PostHandler(onlyRAM bool, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
 	name := r.URL.String()
-	f := NewFile(name, r.Header.Get("Content-Type"))
+
+	headerContentType := r.Header.Get("Content-Type")
+	maxAgeS := getMaxAgeOr(r.Header.Get("Cache-Control"), -1)
+
+	f := NewFile(name, headerContentType, maxAgeS)
 
 	FilesLock.Lock()
 	Files[name] = f
@@ -128,4 +134,22 @@ func addCors(w http.ResponseWriter, cors *Cors) {
 	w.Header().Set("Access-Control-Allow-Origin", strings.Join(cors.GetAllowedOrigins(), ", "))
 	w.Header().Set("Access-Control-Allow-Headers", strings.Join(allowedHeaders, ", "))
 	w.Header().Set("Access-Control-Allow-Methods", strings.Join(cors.GetAllowedMethods(), ", "))
+}
+
+func getMaxAgeOr(s string, def int64) int64 {
+	ret := def
+	r := regexp.MustCompile(`max-age=(?P<maxage>\d*)`)
+	match := r.FindStringSubmatch(s)
+	for i, name := range r.SubexpNames() {
+		if i > 0 && i <= len(match) {
+			if name == "maxage" {
+				valInt, err := strconv.ParseInt(match[i], 10, 64)
+				if err == nil {
+					ret = valInt
+					break
+				}
+			}
+		}
+	}
+	return ret
 }

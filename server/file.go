@@ -10,6 +10,7 @@ import (
 	"path"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 var (
@@ -28,10 +29,12 @@ type File struct {
 	buffer      []byte
 	eof         bool
 	onDisk      bool
+	receivedAt  time.Time
+	maxAgeS     int64
 }
 
 // NewFile Creates a new file
-func NewFile(name, contentType string) *File {
+func NewFile(name, contentType string, maxAgeS int64) *File {
 	log.Println("NEW File Content-Type " + contentType)
 
 	return &File{
@@ -41,6 +44,8 @@ func NewFile(name, contentType string) *File {
 		buffer:      []byte{},
 		eof:         false,
 		onDisk:      false,
+		receivedAt:  time.Now(),
+		maxAgeS:     maxAgeS,
 	}
 }
 
