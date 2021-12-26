@@ -53,7 +53,7 @@ func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath
 	})).Methods(http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions)
 
 	if doCleanupBasedOnCacheHeaders {
-		startCleanUp(1000)
+		startCleanUp(basePath, 1000)
 	}
 
 	if (certFilePath != "") && (keyFilePath != "") {
@@ -73,8 +73,8 @@ func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath
 	return err
 }
 
-func startCleanUp(periodMs int64) {
-	go runCleanupEvery(periodMs, cleanUpChannel)
+func startCleanUp(basePath string, periodMs int64) {
+	go runCleanupEvery(basePath, periodMs, cleanUpChannel)
 
 	log.Printf("HTTP Started clean up thread")
 }
@@ -89,7 +89,7 @@ func stopCleanUp() {
 	log.Printf("HTTP Stopped clean up thread")
 }
 
-func runCleanupEvery(periodMs int64, cleanUpChannelBidi chan bool) {
+func runCleanupEvery(basePath string, periodMs int64, cleanUpChannelBidi chan bool) {
 	timeCh := time.NewTicker(time.Millisecond * time.Duration(periodMs))
 	exit := false
 
@@ -97,7 +97,7 @@ func runCleanupEvery(periodMs int64, cleanUpChannelBidi chan bool) {
 		select {
 		// Wait for the next tick
 		case tm := <-timeCh.C:
-			cacheCleanUp(tm)
+			cacheCleanUp(basePath, tm)
 
 		case <-cleanUpChannelBidi:
 			exit = true
@@ -109,9 +109,8 @@ func runCleanupEvery(periodMs int64, cleanUpChannelBidi chan bool) {
 	log.Printf("HTTP Exited clean up thread")
 }
 
-func cacheCleanUp(now time.Time) {
-	//now := time.Now()
-	toDelFilesKeys := []string{}
+func cacheCleanUp(basePath string, now time.Time) {
+	filesToDel := map[string]*File{}
 
 	// TODO: This is a brute force approach, optimization recommended
 
@@ -119,16 +118,20 @@ func cacheCleanUp(now time.Time) {
 	defer FilesLock.Unlock()
 
 	// Check for expired files
-	for keyToDel, file := range Files {
+	for key, file := range Files {
 		if file.maxAgeS >= 0 && file.eof {
 			if file.receivedAt.Add(time.Second * time.Duration(file.maxAgeS)).Before(now) {
-				toDelFilesKeys = append(toDelFilesKeys, keyToDel)
+				filesToDel[key] = file
 			}
 		}
 	}
 	// Delete expired files
-	for _, keyToDel := range toDelFilesKeys {
+	for keyToDel, fileToDel := range filesToDel {
+		// Delete from array
 		delete(Files, keyToDel)
+		if fileToDel.onDisk {
+			fileToDel.RemoveFromDisk(basePath)
+		}
 		log.Printf("CLEANUP expired, deleted: %s", keyToDel)
 	}
 }
