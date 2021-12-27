@@ -38,9 +38,10 @@ make
 ## Testing
 You can execute `./bin/./go-chunked-streaming-server -h` to see all the possible command arguments.
 ```
-Usage of ./bin/./go-chunked-streaming-server:
+Usage of ./bin/go-chunked-streaming-server:
   -c string
         Certificate file path (only for https)
+  -d    Indicates to remove files from the server based on original Cache-Control (max-age) header
   -i int
         Port used for HTTP ingress/ egress (default 9094)
   -k string
@@ -49,6 +50,7 @@ Usage of ./bin/./go-chunked-streaming-server:
         JSON file path with the CORS headers definition
   -p string
         Path used to store (default "./content")
+  -r    Indicates DO NOT use disc as persistent/fallback storage (only RAM)
 ```
 
 ## Example simple HTTP
