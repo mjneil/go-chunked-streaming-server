@@ -4,6 +4,9 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"regexp"
+	"strconv"
+	"strings"
 )
 
 // ChunkedResponseWriter Define a response writer
@@ -58,9 +61,13 @@ func HeadHandler(cors *Cors, w http.ResponseWriter, r *http.Request) {
 }
 
 // PostHandler Writes a file
-func PostHandler(cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
+func PostHandler(onlyRAM bool, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
 	name := r.URL.String()
-	f := NewFile(name, r.Header.Get("Content-Type"))
+
+	headerContentType := r.Header.Get("Content-Type")
+	maxAgeS := getMaxAgeOr(r.Header.Get("Cache-Control"), -1)
+
+	f := NewFile(name, headerContentType, maxAgeS)
 
 	FilesLock.Lock()
 	Files[name] = f
@@ -71,22 +78,23 @@ func PostHandler(cors *Cors, basePath string, w http.ResponseWriter, r *http.Req
 	r.Body.Close()
 	f.Close()
 
-	err := f.WriteToDisk(basePath)
-	if err != nil {
-		log.Fatalf("Error saving to disk: %v", err)
+	if !onlyRAM {
+		err := f.WriteToDisk(basePath)
+		if err != nil {
+			log.Fatalf("Error saving to disk: %v", err)
+		}
 	}
-
 	addCors(w, cors)
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // PutHandler Writes a file
-func PutHandler(cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
-	PostHandler(cors, basePath, w, r)
+func PutHandler(onlyRAM bool, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
+	PostHandler(onlyRAM, cors, basePath, w, r)
 }
 
 // DeleteHandler Deletes a file
-func DeleteHandler(cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
+func DeleteHandler(onlyRAM bool, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
 	FilesLock.RLock()
 	f, ok := Files[r.URL.String()]
 	FilesLock.RUnlock()
@@ -100,7 +108,9 @@ func DeleteHandler(cors *Cors, basePath string, w http.ResponseWriter, r *http.R
 	delete(Files, r.URL.String())
 	FilesLock.Unlock()
 
-	f.RemoveFromDisk(basePath)
+	if !onlyRAM {
+		f.RemoveFromDisk(basePath)
+	}
 
 	addCors(w, cors)
 	w.WriteHeader(http.StatusNoContent)
@@ -115,7 +125,31 @@ func OptionsHandler(cors *Cors, w http.ResponseWriter, r *http.Request) {
 }
 
 func addCors(w http.ResponseWriter, cors *Cors) {
-	w.Header().Set("Access-Control-Allow-Origin", cors.GetAllowedOriginsStr())
-	w.Header().Set("Access-Control-Allow-Headers", cors.GetAllowedHeadersStr())
-	w.Header().Set("Access-Control-Allow-Methods", cors.GetAllowedMethodsStr())
+	// Add Content-Type & Cache-Control automatically
+	// Some features depends on those
+	allowedHeaders := cors.GetAllowedHeaders()
+	allowedHeaders = append(allowedHeaders, "Content-Type")
+	allowedHeaders = append(allowedHeaders, "Cache-Control")
+
+	w.Header().Set("Access-Control-Allow-Origin", strings.Join(cors.GetAllowedOrigins(), ", "))
+	w.Header().Set("Access-Control-Allow-Headers", strings.Join(allowedHeaders, ", "))
+	w.Header().Set("Access-Control-Allow-Methods", strings.Join(cors.GetAllowedMethods(), ", "))
+}
+
+func getMaxAgeOr(s string, def int64) int64 {
+	ret := def
+	r := regexp.MustCompile(`max-age=(?P<maxage>\d*)`)
+	match := r.FindStringSubmatch(s)
+	for i, name := range r.SubexpNames() {
+		if i > 0 && i <= len(match) {
+			if name == "maxage" {
+				valInt, err := strconv.ParseInt(match[i], 10, 64)
+				if err == nil {
+					ret = valInt
+					break
+				}
+			}
+		}
+	}
+	return ret
 }
