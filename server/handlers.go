@@ -32,12 +32,10 @@ func GetHandler(cors *Cors, basePath string, w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	log.Println("GET Content-Type " + f.ContentType)
-
-	w.Header().Set("Content-Type", f.ContentType)
+	addCors(w, cors)
+	addHeaders(w, f.headers)
 	w.Header().Set("Transfer-Encoding", "chunked")
 
-	addCors(w, cors)
 	w.WriteHeader(http.StatusOK)
 	io.Copy(ChunkedResponseWriter{w}, f.NewReader(basePath, w))
 }
@@ -53,10 +51,10 @@ func HeadHandler(cors *Cors, w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", f.ContentType)
+	addCors(w, cors)
+	addHeaders(w, f.headers)
 	w.Header().Set("Transfer-Encoding", "chunked")
 
-	addCors(w, cors)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -64,10 +62,10 @@ func HeadHandler(cors *Cors, w http.ResponseWriter, r *http.Request) {
 func PostHandler(onlyRAM bool, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
 	name := r.URL.String()
 
-	headerContentType := r.Header.Get("Content-Type")
 	maxAgeS := getMaxAgeOr(r.Header.Get("Cache-Control"), -1)
+	headers := getHeadersFiltered(r.Header)
 
-	f := NewFile(name, headerContentType, maxAgeS)
+	f := NewFile(name, headers, maxAgeS)
 
 	FilesLock.Lock()
 	Files[name] = f
@@ -134,8 +132,18 @@ func addCors(w http.ResponseWriter, cors *Cors) {
 	w.Header().Set("Access-Control-Allow-Origin", strings.Join(cors.GetAllowedOrigins(), ", "))
 	w.Header().Set("Access-Control-Allow-Headers", strings.Join(allowedHeaders, ", "))
 	w.Header().Set("Access-Control-Allow-Methods", strings.Join(cors.GetAllowedMethods(), ", "))
+	w.Header().Set("Access-Control-Expose-Headers", strings.Join(allowedHeaders, ", "))
 }
 
+func addHeaders(w http.ResponseWriter, headersSrc http.Header) {
+	// Copy all headers
+	for name, values := range headersSrc {
+		// Loop over all values for the name.
+		for _, value := range values {
+			w.Header().Set(name, value)
+		}
+	}
+}
 func getMaxAgeOr(s string, def int64) int64 {
 	ret := def
 	r := regexp.MustCompile(`max-age=(?P<maxage>\d*)`)
@@ -151,5 +159,14 @@ func getMaxAgeOr(s string, def int64) int64 {
 			}
 		}
 	}
+	return ret
+}
+
+func getHeadersFiltered(headers http.Header) http.Header {
+	ret := headers.Clone()
+
+	// Clean up
+	ret.Del("User-Agent")
+
 	return ret
 }

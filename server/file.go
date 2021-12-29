@@ -23,30 +23,38 @@ var (
 
 // File Definition of file
 type File struct {
-	Name        string
-	ContentType string
-	lock        *sync.RWMutex
-	buffer      []byte
-	eof         bool
-	onDisk      bool
-	receivedAt  time.Time
-	maxAgeS     int64
+	Name       string
+	headers    http.Header
+	lock       *sync.RWMutex
+	buffer     []byte
+	eof        bool
+	onDisk     bool
+	receivedAt time.Time
+	maxAgeS    int64
 }
 
 // NewFile Creates a new file
-func NewFile(name, contentType string, maxAgeS int64) *File {
+func NewFile(name string, headers http.Header, maxAgeS int64) *File {
+	f := File{
+		Name:       name,
+		headers:    headers,
+		lock:       new(sync.RWMutex),
+		buffer:     []byte{},
+		eof:        false,
+		onDisk:     false,
+		receivedAt: time.Now(),
+		maxAgeS:    maxAgeS,
+	}
+
+	contentType := f.GetContentType()
+
 	log.Println("NEW File Content-Type " + contentType)
 
-	return &File{
-		Name:        name,
-		ContentType: contentType,
-		lock:        new(sync.RWMutex),
-		buffer:      []byte{},
-		eof:         false,
-		onDisk:      false,
-		receivedAt:  time.Now(),
-		maxAgeS:     maxAgeS,
-	}
+	return &f
+}
+
+func (f *File) GetContentType() string {
+	return f.headers.Get("Content-Type")
 }
 
 // FileReader Defines a reader
