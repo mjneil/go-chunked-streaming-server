@@ -58,14 +58,14 @@ func (f *File) GetContentType() string {
 }
 
 // FileReader Defines a reader
-type FileReader struct {
+type FileReadCloser struct {
 	offset int
 	w      http.ResponseWriter
 	*File
 }
 
 // NewReader Crates a new filereader from a file
-func (f *File) NewReader(baseDir string, w http.ResponseWriter) io.Reader {
+func (f *File) NewReadCloser(baseDir string, w http.ResponseWriter) io.ReadCloser {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
 
@@ -80,15 +80,18 @@ func (f *File) NewReader(baseDir string, w http.ResponseWriter) io.Reader {
 	}
 
 	fmt.Println("Reading from memory")
-	return &FileReader{
+	return &FileReadCloser{
 		offset: 0,
 		w:      w,
 		File:   f,
 	}
 }
+func (r *FileReadCloser) Close()error {
+	return nil
+}
 
 // Read Reads bytes from filereader
-func (r *FileReader) Read(p []byte) (int, error) {
+func (r *FileReadCloser) Read(p []byte) (int, error) {
 	r.File.lock.RLock()
 	defer r.File.lock.RUnlock()
 	if r.offset >= len(r.File.buffer) {
