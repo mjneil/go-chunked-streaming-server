@@ -37,7 +37,9 @@ func GetHandler(cors *Cors, basePath string, w http.ResponseWriter, r *http.Requ
 	w.Header().Set("Transfer-Encoding", "chunked")
 
 	w.WriteHeader(http.StatusOK)
-	io.Copy(ChunkedResponseWriter{w}, f.NewReader(basePath, w))
+	rc := f.NewReadCloser(basePath,w)
+	defer rc.Close()
+	io.Copy(ChunkedResponseWriter{w}, rc)
 }
 
 // HeadHandler Sends if file exists
