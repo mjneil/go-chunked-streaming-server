@@ -21,6 +21,30 @@ var (
 	FilesLock = new(sync.RWMutex)
 )
 
+// FileReader Defines a reader
+type FileReadCloser struct {
+	offset int
+	w      http.ResponseWriter
+	*File
+}
+
+// Read Reads bytes from filereader
+func (r *FileReadCloser) Read(p []byte) (int, error) {
+	r.File.lock.RLock()
+	defer r.File.lock.RUnlock()
+	if r.offset >= len(r.File.buffer) {
+		if r.File.eof {
+			return 0, io.EOF
+		}
+
+		return 0, nil
+	}
+	n := copy(p, r.File.buffer[r.offset:])
+	r.offset += n
+	// r.w.(http.Flusher).Flush()
+	return n, nil
+}
+
 // File Definition of file
 type File struct {
 	Name       string
@@ -57,15 +81,8 @@ func (f *File) GetContentType() string {
 	return f.headers.Get("Content-Type")
 }
 
-// FileReader Defines a reader
-type FileReader struct {
-	offset int
-	w      http.ResponseWriter
-	*File
-}
-
-// NewReader Crates a new filereader from a file
-func (f *File) NewReader(baseDir string, w http.ResponseWriter) io.Reader {
+// NewReadCloser Crates a new filereader from a file
+func (f *File) NewReadCloser(baseDir string, w http.ResponseWriter) io.ReadCloser {
 	f.lock.RLock()
 	defer f.lock.RUnlock()
 
@@ -80,28 +97,20 @@ func (f *File) NewReader(baseDir string, w http.ResponseWriter) io.Reader {
 	}
 
 	fmt.Println("Reading from memory")
-	return &FileReader{
+	return &FileReadCloser{
 		offset: 0,
 		w:      w,
 		File:   f,
 	}
 }
 
-// Read Reads bytes from filereader
-func (r *FileReader) Read(p []byte) (int, error) {
-	r.File.lock.RLock()
-	defer r.File.lock.RUnlock()
-	if r.offset >= len(r.File.buffer) {
-		if r.File.eof {
-			return 0, io.EOF
-		}
+// Close Closes a file
+func (f *File) Close() error {
+	f.lock.Lock()
+	defer f.lock.Unlock()
+	f.eof = true
 
-		return 0, nil
-	}
-	n := copy(p, r.File.buffer[r.offset:])
-	r.offset += n
-	// r.w.(http.Flusher).Flush()
-	return n, nil
+	return nil
 }
 
 // Write Write bytes to a file
@@ -110,13 +119,6 @@ func (f *File) Write(p []byte) (int, error) {
 	defer f.lock.Unlock()
 	f.buffer = append(f.buffer, p...)
 	return len(p), nil
-}
-
-// Close Closes a file
-func (f *File) Close() {
-	f.lock.Lock()
-	defer f.lock.Unlock()
-	f.eof = true
 }
 
 // WriteToDisk Writes a file to disc
