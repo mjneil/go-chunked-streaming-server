@@ -22,16 +22,24 @@ func (rw ChunkedResponseWriter) Write(p []byte) (nn int, err error) {
 }
 
 // GetHandler Sends file bytes
-func GetHandler(cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
+func GetHandler(waitingRequests *WaitingRequests, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
+	name := r.URL.String()
+
 	FilesLock.RLock()
-	f, ok := Files[r.URL.String()]
+	f, ok := Files[name]
 	FilesLock.RUnlock()
 
 	if !ok {
-		w.WriteHeader(http.StatusNotFound)
-		return
+		isFound := false
+		if waitingRequests != nil {
+			// Wait and return
+			isFound = waitingRequests.AddWaitingRequest(name, getHeadersFiltered(r.Header), cors, basePath, w, r)
+		}
+		if isFound == false {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 	}
-
 	addCors(w, cors)
 	addHeaders(w, f.headers)
 	w.Header().Set("Transfer-Encoding", "chunked")
@@ -59,7 +67,8 @@ func HeadHandler(cors *Cors, w http.ResponseWriter, r *http.Request) {
 }
 
 // PostHandler Writes a file
-func PostHandler(onlyRAM bool, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
+func PostHandler(waitingRequests *WaitingRequests, onlyRAM bool, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
+	// TODO: Add trigger blocking requests reusing/coping the code in Get
 	name := r.URL.String()
 
 	maxAgeS := getMaxAgeOr(r.Header.Get("Cache-Control"), -1)
@@ -84,11 +93,15 @@ func PostHandler(onlyRAM bool, cors *Cors, basePath string, w http.ResponseWrite
 	}
 	addCors(w, cors)
 	w.WriteHeader(http.StatusNoContent)
+
+	if waitingRequests != nil {
+		waitingRequests.ReceivedDataFor(name, f)
+	}
 }
 
 // PutHandler Writes a file
-func PutHandler(onlyRAM bool, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
-	PostHandler(onlyRAM, cors, basePath, w, r)
+func PutHandler(waitingRequests *WaitingRequests, onlyRAM bool, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
+	PostHandler(waitingRequests, onlyRAM, cors, basePath, w, r)
 }
 
 // DeleteHandler Deletes a file
@@ -144,6 +157,7 @@ func addHeaders(w http.ResponseWriter, headersSrc http.Header) {
 		}
 	}
 }
+
 func getMaxAgeOr(s string, def int64) int64 {
 	ret := def
 	r := regexp.MustCompile(`max-age=(?P<maxage>\d*)`)

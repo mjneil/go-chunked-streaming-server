@@ -14,7 +14,7 @@ var (
 )
 
 // StartHTTPServer Starts the webserver
-func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath string, corsConfigFilePath string, onlyRAM bool, doCleanupBasedOnCacheHeaders bool) error {
+func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath string, corsConfigFilePath string, onlyRAM bool, doCleanupBasedOnCacheHeaders bool, waitForDataToArrive bool) error {
 	var err error
 
 	cors := NewCors()
@@ -29,6 +29,12 @@ func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath
 	}
 	log.Printf("CORS: %s", cors.String())
 
+	var waitingRequests *WaitingRequests = nil
+	if waitForDataToArrive {
+		log.Printf("Using waiting requests map")
+		waitingRequests = NewWaitingRequests(WaitingRequestAnswered, WaitingRequestCancelled)
+	}
+
 	r := mux.NewRouter()
 
 	r.PathPrefix("/").Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -36,13 +42,13 @@ func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath
 		log.Printf("%s %s", r.Method, r.URL.String())
 		switch r.Method {
 		case http.MethodGet:
-			GetHandler(cors, basePath, w, r)
+			GetHandler(waitingRequests, cors, basePath, w, r)
 		case http.MethodHead:
 			HeadHandler(cors, w, r)
 		case http.MethodPost:
-			PostHandler(onlyRAM, cors, basePath, w, r)
+			PostHandler(waitingRequests, onlyRAM, cors, basePath, w, r)
 		case http.MethodPut:
-			PutHandler(onlyRAM, cors, basePath, w, r)
+			PutHandler(waitingRequests, onlyRAM, cors, basePath, w, r)
 		case http.MethodDelete:
 			DeleteHandler(onlyRAM, cors, basePath, w, r)
 		case http.MethodOptions:
@@ -68,6 +74,9 @@ func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath
 
 	if doCleanupBasedOnCacheHeaders {
 		stopCleanUp()
+	}
+	if waitingRequests != nil {
+		waitingRequests.Close()
 	}
 
 	return err
@@ -134,4 +143,14 @@ func cacheCleanUp(basePath string, now time.Time) {
 		}
 		log.Printf("CLEANUP expired, deleted: %s", keyToDel)
 	}
+}
+
+func WaitingRequestCancelled(name string, w http.ResponseWriter) {
+	w.WriteHeader(http.StatusNotFound)
+	log.Printf("CANCELLED request for: %s", name)
+}
+
+func WaitingRequestAnswered(name string, w http.ResponseWriter, r *http.Request, cors *Cors, f *File, basePath string) {
+	responseToGET(w, r, cors, f, basePath)
+	log.Printf("ANSWERED request for: %s", name)
 }
