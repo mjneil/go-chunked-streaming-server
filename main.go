@@ -14,6 +14,7 @@ var (
 	port                         = flag.Int("i", 9094, "Port used for HTTP ingress/ egress")
 	corsConfigFilePath           = flag.String("o", "", "JSON file path with the CORS headers definition")
 	onlyRAM                      = flag.Bool("r", false, "Indicates DO NOT use disc as persistent/fallback storage (only RAM)")
+	waitForDataToArrive          = flag.Bool("w", false, "Indicates to GET request to wait for some specific if data is NOT present yet")
 	doCleanupBasedOnCacheHeaders = flag.Bool("d", false, "Indicates to remove files from the server based on original Cache-Control (max-age) header")
 )
 
@@ -26,5 +27,5 @@ func checkError(err error) {
 func main() {
 	flag.Parse()
 
-	checkError(server.StartHTTPServer(*baseOutPath, *port, *certFilePath, *keyFilePath, *corsConfigFilePath, *onlyRAM, *doCleanupBasedOnCacheHeaders))
+	checkError(server.StartHTTPServer(*baseOutPath, *port, *certFilePath, *keyFilePath, *corsConfigFilePath, *onlyRAM, *doCleanupBasedOnCacheHeaders, *waitForDataToArrive))
 }
