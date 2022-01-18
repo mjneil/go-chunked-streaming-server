@@ -32,7 +32,7 @@ func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath
 	var waitingRequests *WaitingRequests = nil
 	if waitForDataToArrive {
 		log.Printf("Using waiting requests map")
-		waitingRequests = NewWaitingRequests(WaitingRequestAnswered, WaitingRequestCancelled)
+		waitingRequests = NewWaitingRequests()
 	}
 
 	r := mux.NewRouter()
@@ -143,14 +143,4 @@ func cacheCleanUp(basePath string, now time.Time) {
 		}
 		log.Printf("CLEANUP expired, deleted: %s", keyToDel)
 	}
-}
-
-func WaitingRequestCancelled(name string, w http.ResponseWriter) {
-	w.WriteHeader(http.StatusNotFound)
-	log.Printf("CANCELLED request for: %s", name)
-}
-
-func WaitingRequestAnswered(name string, w http.ResponseWriter, r *http.Request, cors *Cors, f *File, basePath string) {
-	responseToGET(w, r, cors, f, basePath)
-	log.Printf("ANSWERED request for: %s", name)
 }

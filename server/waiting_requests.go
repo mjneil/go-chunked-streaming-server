@@ -6,42 +6,45 @@ import (
 	"strconv"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
-const defaultRequestExpiration time.Duration = 5000 * time.Millisecond
+const defaultRequestExpiration time.Duration = 1000 * time.Millisecond
 const defaultRequestCleanUpEvery time.Duration = 100 * time.Millisecond
+
+const (
+	cancelSignal = 0
+	isCancelled  = 1
+	dataArrived  = 2
+)
 
 // WaitingRequests stores data of blocked requests
 type WaitingRequests struct {
-	requests     map[string][]*WaitingRequest
+	requests     map[string]*WaitingRequestArrayBlock
 	requestsLock sync.RWMutex
 
 	cleanUpChannelBidi chan bool
+}
 
-	// Callbacks
-	callbackResponse func(string, http.ResponseWriter, *http.Request, *Cors, *File, string)
-	callbackCancel   func(string, http.ResponseWriter)
+type WaitingRequestArrayBlock struct {
+	requests []*WaitingRequest
 }
 
 // WaitingRequest Definition of blocked request waiting for data
 type WaitingRequest struct {
+	uidStr       string
 	receivedAt   time.Time
 	expirationAt time.Time
 
-	cors     *Cors
-	basePath string
-	w        http.ResponseWriter
-	r        *http.Request
+	channelBidi chan int
 }
 
 // NewCors Creates a new Cors object
-func NewWaitingRequests(callbackResponse func(string, http.ResponseWriter, *http.Request, *Cors, *File, string), callbackCancel func(string, http.ResponseWriter)) *WaitingRequests {
+func NewWaitingRequests() *WaitingRequests {
 	brs := WaitingRequests{
-		requests:           map[string][]*WaitingRequest{},
+		requests:           map[string]*WaitingRequestArrayBlock{},
 		cleanUpChannelBidi: make(chan bool),
-
-		callbackResponse: callbackResponse,
-		callbackCancel:   callbackCancel,
 	}
 
 	go brs.runRequestCleanupEvery(defaultRequestCleanUpEvery)
@@ -49,27 +52,49 @@ func NewWaitingRequests(callbackResponse func(string, http.ResponseWriter, *http
 	return &brs
 }
 
-// AddWaitingRequest Adds a new requests to wait for data
-func (brs *WaitingRequests) AddWaitingRequest(name string, headers http.Header, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
-	now := time.Now()
-	expiration := brs.getMaxAgeOr(headers.Get("Cache-Control"), defaultRequestExpiration)
+// AddWaitingRequest Adds a new requests to wait for data, and blocks the execution
+func (brs *WaitingRequests) AddWaitingRequest(name string, headers http.Header) (found bool, waited time.Duration) {
+	found = false
+	nowStart := time.Now()
+	// This is modified Expires, instead of HTTP-date timestamp uses duration in seconds (Ex: "Expires: in=10")
+	expiration := brs.getExpiresInOr(headers.Get("Expires"), defaultRequestExpiration)
 
+	uidStr := uuid.New().String()
 	br := WaitingRequest{
-		receivedAt:   now,
-		expirationAt: now.Add(expiration),
-		cors:         cors,
-		basePath:     basePath,
-		w:            w,
-		r:            r,
+		uidStr:       uidStr,
+		receivedAt:   nowStart,
+		expirationAt: nowStart.Add(expiration),
+		channelBidi:  make(chan int),
 	}
 
 	brs.requestsLock.Lock()
-	defer brs.requestsLock.Unlock()
+
 	//Add waiting request
-	brs.requests[name] = append(brs.requests[name], &br)
+	reqArrayBlock, exists := brs.requests[name]
+	if !exists {
+		brs.requests[name] = &WaitingRequestArrayBlock{}
+		reqArrayBlock = brs.requests[name]
+	}
+	reqArrayBlock.requests = append(reqArrayBlock.requests, &br)
+
+	brs.requestsLock.Unlock()
 
 	// Wait on signal
-	// TODO
+	msg := <-br.channelBidi
+	if msg == dataArrived {
+		found = true
+	}
+
+	// Remove request
+	brs.requestsLock.Lock()
+
+	brs.removeRequestByUID(name, uidStr)
+
+	brs.requestsLock.Unlock()
+
+	waited = time.Since(nowStart)
+
+	return
 }
 
 // AddBlockedRequest Adds a new blocked requests
@@ -79,30 +104,30 @@ func (brs *WaitingRequests) Close() {
 	brs.stopCleanUp()
 }
 
-func (brs *WaitingRequests) ReceivedDataFor(name string, f *File) {
+func (brs *WaitingRequests) ReceivedDataFor(name string) {
 	now := time.Now()
 
 	brs.requestsLock.Lock()
 	defer brs.requestsLock.Unlock()
 
-	for nameWaiting, reqArray := range brs.requests {
+	for nameWaiting, reqArrayBlock := range brs.requests {
 		if name == nameWaiting {
-			for _, bReq := range reqArray {
+			for _, bReq := range reqArrayBlock.requests {
 				if now.Before(bReq.expirationAt) {
-					brs.responseRequest(name, bReq, f)
+					brs.responseRequest(bReq)
 				}
 			}
 		}
 	}
 }
 
-func (brs *WaitingRequests) getMaxAgeOr(s string, def time.Duration) time.Duration {
+func (brs *WaitingRequests) getExpiresInOr(s string, def time.Duration) time.Duration {
 	ret := def
-	r := regexp.MustCompile(`max-age=(?P<maxage>\d*)`)
+	r := regexp.MustCompile(`in=(?P<in>\d*)`)
 	match := r.FindStringSubmatch(s)
 	for i, name := range r.SubexpNames() {
 		if i > 0 && i <= len(match) {
-			if name == "maxage" {
+			if name == "in" {
 				valInt, err := strconv.ParseInt(match[i], 10, 64)
 				if err == nil {
 					ret = time.Duration(valInt) * time.Second
@@ -145,57 +170,47 @@ func (brs *WaitingRequests) expireRequests(now time.Time) {
 	brs.requestsLock.Lock()
 	defer brs.requestsLock.Unlock()
 
-	// This could be heavily improved, we will be blocking the thread a lot of time here if we have a big number of waiting requests.
-	// Create a deletion flag and do it async during idle time would be better
-
-	toDelReqName := []string{}
-	for name, reqArray := range brs.requests {
-		toDelReqIndex := []int{}
-		for i, bReq := range reqArray {
+	for name, reqArrayBlock := range brs.requests {
+		for i, bReq := range reqArrayBlock.requests {
 			// Add expired requests to delete array
 			if now.After(bReq.expirationAt) {
-				toDelReqIndex = append(toDelReqIndex, i)
+				brs.cancelRequest(brs.requests[name].requests[i])
 			}
 		}
-		// Execute deletion
-		for i := len(toDelReqIndex) - 1; i >= 0; i-- {
-			index := toDelReqIndex[i]
-			brs.cancelRequest(name, brs.requests[name][index])
-			reqArray = append(reqArray[:index], reqArray[index+1:]...)
-		}
-		// Add URL that has NO waiting requests for removal
-		if len(reqArray) <= 0 {
-			toDelReqName = append(toDelReqName, name)
-		}
-	}
-	// Execute removal of waiting requests URLs
-	for _, name := range toDelReqName {
-		delete(brs.requests, name)
 	}
 }
 
 func (brs *WaitingRequests) cancelRemoveAllRequests() {
-	for name, reqArray := range brs.requests {
-		for _, bReq := range reqArray {
-			brs.cancelRequest(name, bReq)
+	for _, reqArrayBlock := range brs.requests {
+		for _, bReq := range reqArrayBlock.requests {
+			brs.cancelRequest(bReq)
 		}
 	}
-	// Remove all requests
-	for name := range brs.requests {
-		brs.requests[name] = nil
-	}
-	// Clear map
-	brs.requests = map[string][]*WaitingRequest{}
 }
 
-func (brs *WaitingRequests) cancelRequest(name string, br *WaitingRequest) {
-	if brs.callbackCancel != nil {
-		brs.callbackCancel(name, br.w)
+func (brs *WaitingRequests) removeRequestByUID(name string, uidStr string) {
+	reqArrayBlock, exists := brs.requests[name]
+	if exists {
+		for i, bReq := range reqArrayBlock.requests {
+			if bReq.uidStr == uidStr {
+				if len(reqArrayBlock.requests) > 1 {
+					reqArrayBlock.requests = append(reqArrayBlock.requests[:i], reqArrayBlock.requests[i+1:]...)
+				} else {
+					reqArrayBlock.requests = []*WaitingRequest{}
+				}
+			}
+		}
+		// Remove name entry if no waiting requests
+		if len(reqArrayBlock.requests) <= 0 {
+			delete(brs.requests, name)
+		}
 	}
 }
 
-func (brs *WaitingRequests) responseRequest(name string, br *WaitingRequest, f *File) {
-	if brs.callbackResponse != nil {
-		brs.callbackResponse(name, br.w, br.r, br.cors, f, br.basePath)
-	}
+func (brs *WaitingRequests) cancelRequest(br *WaitingRequest) {
+	br.channelBidi <- cancelSignal
+}
+
+func (brs *WaitingRequests) responseRequest(br *WaitingRequest) {
+	br.channelBidi <- dataArrived
 }
