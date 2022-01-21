@@ -14,7 +14,7 @@ var (
 )
 
 // StartHTTPServer Starts the webserver
-func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath string, corsConfigFilePath string, onlyRAM bool, doCleanupBasedOnCacheHeaders bool, waitForDataToArrive bool) error {
+func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath string, corsConfigFilePath string, onlyRAM bool, doCleanupBasedOnCacheHeaders bool, waitForDataToArrive bool, urlTranslator bool) error {
 	var err error
 
 	cors := NewCors()
@@ -35,6 +35,12 @@ func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath
 		waitingRequests = NewWaitingRequests()
 	}
 
+	var urlLiveStreamingTranslator *UrlTranslator = nil
+	if urlTranslator {
+		log.Printf("Using URL translator")
+		urlLiveStreamingTranslator = NewUrlTranslator()
+	}
+
 	r := mux.NewRouter()
 
 	r.PathPrefix("/").Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -42,15 +48,15 @@ func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath
 		log.Printf("%s %s", r.Method, r.URL.String())
 		switch r.Method {
 		case http.MethodGet:
-			GetHandler(waitingRequests, cors, basePath, w, r)
+			GetHandler(urlLiveStreamingTranslator, waitingRequests, cors, basePath, w, r)
 		case http.MethodHead:
 			HeadHandler(cors, w, r)
 		case http.MethodPost:
-			PostHandler(waitingRequests, onlyRAM, cors, basePath, w, r)
+			PostHandler(urlLiveStreamingTranslator, waitingRequests, onlyRAM, cors, basePath, w, r)
 		case http.MethodPut:
-			PutHandler(waitingRequests, onlyRAM, cors, basePath, w, r)
+			PutHandler(urlLiveStreamingTranslator, waitingRequests, onlyRAM, cors, basePath, w, r)
 		case http.MethodDelete:
-			DeleteHandler(onlyRAM, cors, basePath, w, r)
+			DeleteHandler(urlLiveStreamingTranslator, onlyRAM, cors, basePath, w, r)
 		case http.MethodOptions:
 			OptionsHandler(cors, w, r)
 		default:
@@ -59,7 +65,7 @@ func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath
 	})).Methods(http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions)
 
 	if doCleanupBasedOnCacheHeaders {
-		startCleanUp(basePath, 1000)
+		startCleanUp(urlLiveStreamingTranslator, basePath, 1000)
 	}
 
 	if (certFilePath != "") && (keyFilePath != "") {
@@ -82,8 +88,8 @@ func StartHTTPServer(basePath string, port int, certFilePath string, keyFilePath
 	return err
 }
 
-func startCleanUp(basePath string, periodMs int64) {
-	go runCleanupEvery(basePath, periodMs, cleanUpChannel)
+func startCleanUp(urlLiveStreamingTranslator *UrlTranslator, basePath string, periodMs int64) {
+	go runCleanupEvery(urlLiveStreamingTranslator, basePath, periodMs, cleanUpChannel)
 
 	log.Printf("HTTP Started clean up thread")
 }
@@ -98,7 +104,7 @@ func stopCleanUp() {
 	log.Printf("HTTP Stopped clean up thread")
 }
 
-func runCleanupEvery(basePath string, periodMs int64, cleanUpChannelBidi chan bool) {
+func runCleanupEvery(urlLiveStreamingTranslator *UrlTranslator, basePath string, periodMs int64, cleanUpChannelBidi chan bool) {
 	timeCh := time.NewTicker(time.Millisecond * time.Duration(periodMs))
 	exit := false
 
@@ -106,7 +112,7 @@ func runCleanupEvery(basePath string, periodMs int64, cleanUpChannelBidi chan bo
 		select {
 		// Wait for the next tick
 		case tm := <-timeCh.C:
-			cacheCleanUp(basePath, tm)
+			cacheCleanUp(urlLiveStreamingTranslator, basePath, tm)
 
 		case <-cleanUpChannelBidi:
 			exit = true
@@ -118,7 +124,7 @@ func runCleanupEvery(basePath string, periodMs int64, cleanUpChannelBidi chan bo
 	log.Printf("HTTP Exited clean up thread")
 }
 
-func cacheCleanUp(basePath string, now time.Time) {
+func cacheCleanUp(urlLiveStreamingTranslator *UrlTranslator, basePath string, now time.Time) {
 	filesToDel := map[string]*File{}
 
 	// TODO: This is a brute force approach, optimization recommended
@@ -136,7 +142,9 @@ func cacheCleanUp(basePath string, now time.Time) {
 	}
 	// Delete expired files
 	for keyToDel, fileToDel := range filesToDel {
-		// Delete from array
+		// Delete from translator, array and disc
+		urlLiveStreamingTranslator.RemoveEntry(keyToDel)
+
 		delete(Files, keyToDel)
 		if fileToDel.onDisk {
 			fileToDel.RemoveFromDisk(basePath)

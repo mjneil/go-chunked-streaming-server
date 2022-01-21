@@ -23,11 +23,16 @@ func (rw ChunkedResponseWriter) Write(p []byte) (nn int, err error) {
 }
 
 // GetHandler Sends file bytes
-func GetHandler(waitingRequests *WaitingRequests, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
+func GetHandler(urlTranslator *UrlTranslator, waitingRequests *WaitingRequests, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
 	name := r.URL.String()
 
 	FilesLock.RLock()
+
+	if urlTranslator != nil {
+		name = urlTranslator.GetTranslated(name)
+	}
 	f, ok := Files[name]
+
 	FilesLock.RUnlock()
 
 	if !ok {
@@ -87,17 +92,22 @@ func HeadHandler(cors *Cors, w http.ResponseWriter, r *http.Request) {
 }
 
 // PostHandler Writes a file
-func PostHandler(waitingRequests *WaitingRequests, onlyRAM bool, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
-	// TODO: Add trigger blocking requests reusing/coping the code in Get
+func PostHandler(urlTranslator *UrlTranslator, waitingRequests *WaitingRequests, onlyRAM bool, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
 	name := r.URL.String()
 
 	maxAgeS := getMaxAgeOr(r.Header.Get("Cache-Control"), -1)
+	chunkCreatedAt := getGenerationTimeOr(r.Header.Get("Joc-First-Frame-Clk"), time.Now())
 	headers := getHeadersFiltered(r.Header)
 
 	f := NewFile(name, headers, maxAgeS)
 
 	FilesLock.Lock()
+
+	if urlTranslator != nil {
+		urlTranslator.AddNewEntry(name, chunkCreatedAt)
+	}
 	Files[name] = f
+
 	FilesLock.Unlock()
 
 	// Start writing to file without holding lock so that GET requests can read from it
@@ -121,14 +131,21 @@ func PostHandler(waitingRequests *WaitingRequests, onlyRAM bool, cors *Cors, bas
 }
 
 // PutHandler Writes a file
-func PutHandler(waitingRequests *WaitingRequests, onlyRAM bool, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
-	PostHandler(waitingRequests, onlyRAM, cors, basePath, w, r)
+func PutHandler(urlTranslator *UrlTranslator, waitingRequests *WaitingRequests, onlyRAM bool, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
+	PostHandler(urlTranslator, waitingRequests, onlyRAM, cors, basePath, w, r)
 }
 
 // DeleteHandler Deletes a file
-func DeleteHandler(onlyRAM bool, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
+func DeleteHandler(urlTranslator *UrlTranslator, onlyRAM bool, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
+	name := r.URL.String()
+
 	FilesLock.RLock()
-	f, ok := Files[r.URL.String()]
+
+	if urlTranslator != nil {
+		urlTranslator.RemoveEntry(name)
+	}
+	f, ok := Files[name]
+
 	FilesLock.RUnlock()
 
 	addCors(w, cors)
@@ -193,6 +210,17 @@ func getMaxAgeOr(s string, def int64) int64 {
 				}
 			}
 		}
+	}
+	return ret
+}
+
+func getGenerationTimeOr(valStr string, def time.Time) time.Time {
+	ret := def
+	timeMs, err := strconv.ParseInt(valStr, 10, 64)
+	if err == nil {
+		timeSecs := timeMs / 1000
+		timeNs := (timeMs - (timeSecs * 1000)) * 1000 * 1000
+		ret = time.Unix(timeSecs, timeNs)
 	}
 	return ret
 }
