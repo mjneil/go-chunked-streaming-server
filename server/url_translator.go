@@ -141,7 +141,7 @@ func (urlt *UrlTranslator) getOld(baseUri string, secOld int) (retBasePath strin
 		// Find latest
 		for key, unitToCheck := range stream {
 			if unitToCheck.receivedAt.After(timeStart) {
-				if retSeqId < 0 || stream[retSeqId].receivedAt.Before(unitToCheck.receivedAt) {
+				if retSeqId < 0 || stream[retSeqId].receivedAt.After(unitToCheck.receivedAt) {
 					retSeqId = key
 				}
 			}
