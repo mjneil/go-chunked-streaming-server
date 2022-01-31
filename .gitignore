@@ -2,3 +2,4 @@ content/
 bin/
 certs/
 .vscode/
+__*

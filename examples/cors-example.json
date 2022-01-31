@@ -1,5 +1,5 @@
 {
     "AllowedMethods": ["GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS"],
-    "AllowedHeaders": ["Joc-Seq-Id", "Joc-Media-Type", "Joc-Timestamp", "Joc-Uniq-Id", "Joc-First-Frame-Clk", "Joc-Chunk-Type", "Expires"],
+    "AllowedHeaders": ["Joc-Seq-Id", "Joc-Media-Type", "Joc-Timestamp", "Joc-Duration", "Joc-Uniq-Id", "Joc-First-Frame-Clk", "Joc-Chunk-Type", "Expires"],
     "AllowedOrigins": ["*"]
 }
