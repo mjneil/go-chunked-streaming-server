@@ -25,11 +25,12 @@ func (rw ChunkedResponseWriter) Write(p []byte) (nn int, err error) {
 // GetHandler Sends file bytes
 func GetHandler(urlTranslator *UrlTranslator, waitingRequests *WaitingRequests, cors *Cors, basePath string, w http.ResponseWriter, r *http.Request) {
 	name := r.URL.String()
+	isTranslated := false
 
 	FilesLock.RLock()
 
 	if urlTranslator != nil {
-		name = urlTranslator.GetTranslated(name)
+		name, isTranslated = urlTranslator.GetTranslated(name)
 	}
 	f, ok := Files[name]
 
@@ -41,6 +42,7 @@ func GetHandler(urlTranslator *UrlTranslator, waitingRequests *WaitingRequests, 
 		if waitingRequests != nil {
 			// Wait and return
 			isFound, waited = waitingRequests.AddWaitingRequest(name, getHeadersFiltered(r.Header))
+			// Indicates time waited
 			w.Header().Set("Waited-For-Data-Ms", strconv.FormatInt(int64(waited/time.Millisecond), 10))
 			if isFound {
 				// Refresh file
@@ -67,6 +69,11 @@ func GetHandler(urlTranslator *UrlTranslator, waitingRequests *WaitingRequests, 
 	// Add chunked only if the file is not yet complete
 	if !f.eof {
 		w.Header().Set("Transfer-Encoding", "chunked")
+	}
+	// Overwrite cache settings if URL was translated
+	if isTranslated {
+		durS := urlTranslator.GetTranslatedMaxAge().Seconds()
+		w.Header().Set("Cache-Control", "max-age="+strconv.FormatFloat(durS, 'f', 0, 64))
 	}
 
 	w.WriteHeader(http.StatusOK)

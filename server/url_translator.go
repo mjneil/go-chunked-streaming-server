@@ -7,6 +7,8 @@ import (
 	"time"
 )
 
+const defaultMaxAgeForTranslated time.Duration = 1000 * time.Millisecond
+
 // UrlTranslator keeps the URL entries
 type UrlTranslator struct {
 	streamEntries map[string]map[int64]urlTranslatorStreamUnit
@@ -25,6 +27,10 @@ func NewUrlTranslator() *UrlTranslator {
 		streamEntries: map[string]map[int64]urlTranslatorStreamUnit{},
 	}
 	return &urlT
+}
+
+func (urlt *UrlTranslator) GetTranslatedMaxAge() time.Duration {
+	return defaultMaxAgeForTranslated
 }
 
 func (urlt *UrlTranslator) AddNewEntry(uriStr string, receivedAt time.Time) {
@@ -77,11 +83,13 @@ func (urlt *UrlTranslator) RemoveEntry(uriStr string) {
 	urlt.translatorLock.Unlock()
 }
 
-func (urlt *UrlTranslator) GetTranslated(uriStr string) (retUriStr string) {
+func (urlt *UrlTranslator) GetTranslated(uriStr string) (retUriStr string, isTranslated bool) {
 	retUriStr = uriStr
+	isTranslated = false
 
 	baseStr, cmdStr := urlt.parseBaseUri(uriStr)
 	if strings.HasPrefix(cmdStr, "EDGE") {
+		isTranslated = true
 		urlt.translatorLock.Lock()
 
 		retUriStr = urlt.getLatest(baseStr) // Inside will NOT Lock
@@ -93,6 +101,7 @@ func (urlt *UrlTranslator) GetTranslated(uriStr string) (retUriStr string) {
 			secsStr := secsStrArr[1]
 			secs, err := strconv.Atoi(secsStr)
 			if err == nil {
+				isTranslated = true
 				urlt.translatorLock.Lock()
 
 				retUriStr = urlt.getOld(baseStr, secs) // Inside will NOT Lock
